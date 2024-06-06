@@ -6,14 +6,17 @@ import jakarta.annotation.PostConstruct;
 import org.htmlunit.HttpMethod;
 import org.htmlunit.WebClient;
 import org.htmlunit.WebRequest;
-import org.htmlunit.html.HtmlForm;
-import org.htmlunit.html.HtmlPage;
+import org.htmlunit.html.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 @Component
 @PropertySource("classpath:api.properties")
@@ -27,40 +30,110 @@ public class DyuCourseBrowser extends WebClient {
         this.getOptions().setJavaScriptEnabled(false);
     }
 
-    public void login(User user) throws IOException {
-        WebRequest request = new WebRequest(
+    WebRequest prepareLoginRequest(User user) throws MalformedURLException {
+        WebRequest r = new WebRequest(
                 new URL(this.loginApiLink), HttpMethod.POST
         );
-
-        request.setRequestBody(
+        r.setRequestBody(
                 String.format(
                         "txt_userid=%s&pwd_word=%s",
                         user.getLoginParameter().getId(),
                         user.getLoginParameter().getPassword()
+                ));
+        return r;
+    }
+
+    public void login(User user) throws IOException {
+        WebRequest request;
+
+        HtmlPage responsePage;
+        HtmlForm responseForm;
+
+        String forwardLink;
+
+        request = this.prepareLoginRequest(user);
+        responsePage = this.getPage(request);
+        responseForm = this.getInformationForm(responsePage, "mf");
+
+        if (responseForm == null || responseForm.getActionAttribute().equalsIgnoreCase("error")) {
+            throw new RuntimeException("login exception");
+        }
+
+        do {
+            forwardLink = responseForm.getActionAttribute();
+
+            if (!this.isValidURL(forwardLink)) {
+                forwardLink = String.format(
+                        "http://%s/%s", responsePage.getUrl().getHost(), forwardLink
+                );
+            }
+
+            request.setUrl(new URL(forwardLink));
+            request.setRequestBody(
+                    this.convertFormToRequestBody(responseForm)
+            );
+
+            responsePage = this.getPage(request);
+            responseForm = this.getInformationForm(responsePage, "mf", "myform");
+        } while (responseForm != null);
+
+//        HtmlDivision htmlDiv = page.querySelector("div.minor_items");
+//        List<HtmlSpan> htmlSpans = htmlDiv.getChildNodes().stream().filter(e -> e instanceof HtmlSpan).map(e -> (HtmlSpan) e).toList();
+//        if (htmlSpans.isEmpty()) {
+//            throw new RuntimeException("user information error");
+//        }
+//
+//        htmlSpans.forEach(htmlInput -> {
+//            HtmlLabel label = (HtmlLabel) htmlInput.getElementsByTagName("label").get(0);
+//            if (label == null) return;
+//            System.out.println(label.getAttribute("title"));
+//        });
+    }
+
+    HtmlForm getInformationForm(HtmlPage htmlPage, String... ids) {
+        return htmlPage.getForms().stream()
+                .filter(
+                        e -> Arrays.stream(ids).anyMatch(
+                                id -> e.getNameAttribute().equalsIgnoreCase(id)
+                        )
+                ).findFirst()
+                .orElse(null);
+    }
+
+    String convertFormToRequestBody(HtmlForm htmlForm) {
+        List<HtmlInput> inputs = htmlForm.getChildNodes().stream()
+                .filter(e -> e instanceof HtmlInput)
+                .map(e -> (HtmlInput) e).toList();
+
+        List<String> bodies = new ArrayList<>();
+
+        inputs.forEach(htmlInput -> bodies.add(
+                String.format(
+                        "%s=%s", htmlInput.getId(), htmlInput.getValue()
                 )
-        );
+        ));
 
+        return String.join("&", bodies);
+    }
 
-        HtmlPage page = this.getPage(request);
-        HtmlForm form = page.getFormByName("mf");
-        String headerLog = form.getInputByName("header_log").getValueAttribute();
-        user.setHeaderLog(headerLog);
+    boolean isValidURL(String url) {
+        try {
+            new URL(url);
+            return true;
+        } catch (MalformedURLException e) {
+            return false;
+        }
     }
 
     public Course getCourse(String courseId) throws IOException {
         WebRequest request = new WebRequest(
-                new URL("http://cs.dyu.edu.tw/g_c_name.php?ad_ser=" + courseId),
+                new URL("http://syl.dyu.edu.tw/sl_cour.php" + courseId),
                 HttpMethod.GET
         );
 
-        String str = this.getPage(request).getWebResponse().getContentAsString();
-        str = str.replace(" ", "").trim();
-        short credit = Short.parseShort(str.split("/")[0]);
-        String courseName = str.split("/")[1];
+        // TODO: recode
+
         return Course.builder()
-                .courseId(courseId)
-                .courseName(courseName)
-                .credit(credit)
                 .build();
     }
 }

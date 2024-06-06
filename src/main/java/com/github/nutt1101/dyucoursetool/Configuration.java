@@ -23,7 +23,7 @@ public class Configuration {
     @PostConstruct
     void setup() {
         this.users = new ArrayList<>();
-        setupUser();
+        this.setupUser();
     }
 
     void setupUser() {
@@ -34,16 +34,10 @@ public class Configuration {
             LoginParameter parameter = this.getLoginParameterBuilder(user).build();
 
             JSONArray courseArray = user.getJSONArray("courses");
-            List<Course> courses = this.getCourses(courseArray);
 
-            User newUser = this.getUserBuilder(parameter, courses).build();
+            User newUser = this.getUserBuilder(parameter).build();
 
             this.users.add(newUser);
-            try {
-                browser.login(users.get(0));
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
         }
     }
 
@@ -60,7 +54,8 @@ public class Configuration {
         for (int i = 0; i < courseArray.length(); i++) {
             String courseId = courseArray.getString(i);
             try {
-                browser.getCourse(courseId);
+                Course course = this.browser.getCourse(courseId);
+                System.out.println(course);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -68,10 +63,10 @@ public class Configuration {
         return courses;
     }
 
-    User.UserBuilder getUserBuilder(LoginParameter p, List<Course> courses) {
+    User.UserBuilder getUserBuilder(LoginParameter p) {
         return User.builder()
                 .loginParameter(p)
-                .courses(courses)
+                .courses(null)
                 .headerLog(null)
                 .resaveString(null);
     }
