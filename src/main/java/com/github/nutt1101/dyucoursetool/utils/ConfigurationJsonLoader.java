@@ -39,6 +39,7 @@ public class ConfigurationJsonLoader {
             fileWriter.write(
                     """
                         {
+                          "time" : "18 : 00",
                           "info" : [
                             {
                               "id" : "F0000000",

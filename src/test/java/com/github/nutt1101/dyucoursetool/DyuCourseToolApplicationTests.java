@@ -23,8 +23,6 @@ class DyuCourseToolApplicationTests {
                                 .build()
                 )
                 .build();
-        this.browser.login(user);
-        System.out.println(this.browser.getCourse("1568"));
     }
 
 }

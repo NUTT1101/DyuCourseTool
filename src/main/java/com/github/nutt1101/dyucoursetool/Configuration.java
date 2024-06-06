@@ -21,12 +21,12 @@ public class Configuration {
     List<User> users;
 
     @PostConstruct
-    void setup() {
+    void setup() throws IOException {
         this.users = new ArrayList<>();
         this.setupUser();
     }
 
-    void setupUser() {
+    void setupUser() throws IOException {
         JSONObject jsonObj = this.configurationJsonLoader.getJsonObject();
         JSONArray userArray = jsonObj.getJSONArray("info");
         for (int i = 0; i < userArray.length(); i++) {
@@ -35,10 +35,20 @@ public class Configuration {
 
             JSONArray courseArray = user.getJSONArray("courses");
 
-            User newUser = this.getUserBuilder(parameter).build();
+            User newUser = this.getUserBuilder(parameter, this.getCourses(courseArray)).build();
 
+            this.browser.login(newUser);
+            System.out.println("----以下是您要選的課程----");
+            newUser.getCourses().forEach(course -> System.out.printf(
+                    """
+                    課程代號：%s
+                    課程名稱：%s
+                    課程學分：%s
+                    ------
+                    """, course.getCourseId(), course.getCourseName(), course.getCredit()));
             this.users.add(newUser);
         }
+        System.out.println("--------");
     }
 
     LoginParameter.LoginParameterBuilder getLoginParameterBuilder(JSONObject userObject) {
@@ -54,8 +64,9 @@ public class Configuration {
         for (int i = 0; i < courseArray.length(); i++) {
             String courseId = courseArray.getString(i);
             try {
-                Course course = this.browser.getCourse(courseId);
-                System.out.println(course);
+                courses.add(
+                        this.browser.getCourse(courseId)
+                );
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -63,10 +74,10 @@ public class Configuration {
         return courses;
     }
 
-    User.UserBuilder getUserBuilder(LoginParameter p) {
+    User.UserBuilder getUserBuilder(LoginParameter p, List<Course> courses) {
         return User.builder()
                 .loginParameter(p)
-                .courses(null)
+                .courses(courses)
                 .headerLog(null)
                 .resaveString(null);
     }
