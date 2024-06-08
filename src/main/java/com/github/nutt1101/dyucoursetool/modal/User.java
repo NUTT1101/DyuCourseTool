@@ -14,4 +14,5 @@ public class User {
     List<Course> courses;
     String headerLog;
     String resaveString;
+    String serviceHost;
 }

@@ -6,6 +6,7 @@ import com.github.nutt1101.dyucoursetool.modal.User;
 import com.github.nutt1101.dyucoursetool.utils.ConfigurationJsonLoader;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -15,6 +16,7 @@ import java.util.List;
 
 @org.springframework.context.annotation.Configuration
 @RequiredArgsConstructor
+@Log4j2
 public class Configuration {
     final ConfigurationJsonLoader configurationJsonLoader;
     final DyuCourseBrowser browser;
@@ -23,13 +25,14 @@ public class Configuration {
     @PostConstruct
     void setup() throws IOException {
         this.users = new ArrayList<>();
-        this.setupUser();
+//        this.setupUser();
     }
 
     void setupUser() throws IOException {
         JSONObject jsonObj = this.configurationJsonLoader.getJsonObject();
         JSONArray userArray = jsonObj.getJSONArray("info");
         for (int i = 0; i < userArray.length(); i++) {
+            StringBuilder messageBuilder = new StringBuilder();
             JSONObject user = userArray.getJSONObject(i);
             LoginParameter parameter = this.getLoginParameterBuilder(user).build();
 
@@ -38,17 +41,24 @@ public class Configuration {
             User newUser = this.getUserBuilder(parameter, this.getCourses(courseArray)).build();
 
             this.browser.login(newUser);
-            System.out.println("----以下是您要選的課程----");
-            newUser.getCourses().forEach(course -> System.out.printf(
-                    """
-                    課程代號：%s
-                    課程名稱：%s
-                    課程學分：%s
-                    ------
-                    """, course.getCourseId(), course.getCourseName(), course.getCredit()));
+
+            messageBuilder.append("----以下是您要選的課程----").append("\n");
+            newUser.getCourses().forEach(course -> {
+                String message = String.format(
+                        """
+                        課程代號：%s
+                        課程名稱：%s
+                        課程學分：%s
+                        ------
+                        """, course.getCourseId(), course.getCourseName(), course.getCredit()
+                );
+                messageBuilder.append(message);
+            });
+
             this.users.add(newUser);
+
+            log.info(messageBuilder);
         }
-        System.out.println("--------");
     }
 
     LoginParameter.LoginParameterBuilder getLoginParameterBuilder(JSONObject userObject) {
@@ -67,7 +77,7 @@ public class Configuration {
                 courses.add(
                         this.browser.getCourse(courseId)
                 );
-            } catch (IOException e) {
+            } catch (IOException | InterruptedException e) {
                 throw new RuntimeException(e);
             }
         }

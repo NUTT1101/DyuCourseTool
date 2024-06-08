@@ -3,11 +3,13 @@ package com.github.nutt1101.dyucoursetool;
 import com.github.nutt1101.dyucoursetool.modal.Course;
 import com.github.nutt1101.dyucoursetool.modal.User;
 import jakarta.annotation.PostConstruct;
-import lombok.SneakyThrows;
+import lombok.Getter;
+import lombok.NonNull;
 import org.htmlunit.HttpMethod;
 import org.htmlunit.WebClient;
 import org.htmlunit.WebRequest;
 import org.htmlunit.html.*;
+import org.htmlunit.util.NameValuePair;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.stereotype.Component;
@@ -25,9 +27,10 @@ import java.util.Optional;
 public class DyuCourseBrowser extends WebClient {
     @Value("${api.login}")
     String loginApiLink;
-
     @Value("${api.course-info}")
     String courseInfoLink;
+    @Value("${api.path.course-operation}")
+    String courseOperationLink;
 
     String semesterYear;
     String semester;
@@ -56,6 +59,100 @@ public class DyuCourseBrowser extends WebClient {
         return r;
     }
 
+    @Getter
+    public enum OperationType {
+        Add("add_ser"), Delete("del_ser");
+
+        private final String value;
+
+        OperationType(String value) {
+            this.value = value;
+        }
+    }
+
+    public void addCourse(User user) throws IOException {
+        for (Course course : user.getCourses()) {
+            this.courseOperation(
+                    user,
+                    OperationType.Add,
+                    course
+            );
+        }
+    }
+
+    public void addCourse(User user, Course course) throws IOException {
+        this.courseOperation(
+                user,
+                OperationType.Add,
+                course
+        );
+    }
+
+    public void deleteCourse(User user, Course course) throws IOException {
+        this.courseOperation(
+                user,
+                OperationType.Delete,
+                course
+        );
+    }
+
+    void courseOperation(User user, OperationType type, Course course) throws IOException {
+        if (user.getHeaderLog() == null ||
+                user.getServiceHost() == null
+        ) {
+            this.login(user);
+        }
+
+        WebRequest addRequest = this.prepareCourseOpRequest(user, type, course);
+        HtmlPage page = this.getPage(addRequest);
+
+        System.out.println(page.getWebResponse().getContentAsString());
+    }
+
+    WebRequest prepareCourseOpRequest(User user, OperationType type, Course course) throws MalformedURLException {
+        WebRequest r = new WebRequest(
+                new URL(
+                        String.format(
+                                "http://%s/%s", user.getServiceHost(), this.courseOperationLink
+                        )
+                ),
+                HttpMethod.POST
+        );
+
+        List<NameValuePair> valuePairs = this.prepareCourseOpBody(user, type, course);
+        r.setRequestParameters(valuePairs);
+
+        return r;
+    }
+
+    List<NameValuePair> prepareCourseOpBody(@NonNull User user, @NonNull OperationType type, @NonNull Course course) {
+        List<NameValuePair> valuePairs = new ArrayList<>();
+
+        if (type == OperationType.Add) {
+            valuePairs.add(
+                    new NameValuePair("mymop", "")
+            );
+            valuePairs.add(
+                    new NameValuePair("degree_no", "1")
+            );
+            valuePairs.add(
+                    new NameValuePair("kin_no", "1")
+            );
+        }
+
+        valuePairs.add(
+                new NameValuePair("txt_serial", course.getCourseId())
+        );
+        valuePairs.add(
+                new NameValuePair("addfunc", type.getValue())
+        );
+        valuePairs.add(
+                new NameValuePair("header_log", user.getHeaderLog())
+        );
+
+        return valuePairs;
+    }
+
     public void login(User user) throws IOException {
         WebRequest request;
 
@@ -81,7 +178,11 @@ public class DyuCourseBrowser extends WebClient {
                 );
             }
 
-            request.setUrl(new URL(forwardLink));
+            URL serviceHostURL = new URL(forwardLink);
+
+            user.setServiceHost(serviceHostURL.getHost());
+
+            request.setUrl(serviceHostURL);
             request.setRequestBody(
                     this.convertFormToRequestBody(responseForm)
             );
@@ -90,17 +191,17 @@ public class DyuCourseBrowser extends WebClient {
             responseForm = this.getInformationForm(responsePage, "mf", "myform");
         } while (responseForm != null);
 
-        HtmlDivision htmlDiv = responsePage.querySelector("div.minor_items");
-        List<HtmlSpan> htmlSpans = htmlDiv.getChildNodes().stream().filter(e -> e instanceof HtmlSpan).map(e -> (HtmlSpan) e).toList();
-        if (htmlSpans.isEmpty()) {
-            throw new RuntimeException("user information error");
-        }
-
-        htmlSpans.forEach(htmlInput -> {
-            HtmlLabel label = (HtmlLabel) htmlInput.getElementsByTagName("label").get(0);
-            if (label == null) return;
-            System.out.println(label.getAttribute("title"));
-        });
+//        HtmlDivision htmlDiv = responsePage.querySelector("div.minor_items");
+//        List<HtmlSpan> htmlSpans = htmlDiv.getChildNodes().stream().filter(e -> e instanceof HtmlSpan).map(e -> (HtmlSpan) e).toList();
+//        if (htmlSpans.isEmpty()) {
+//            throw new RuntimeException("user information error");
+//        }
+//
+//        htmlSpans.forEach(htmlInput -> {
+//            HtmlLabel label = (HtmlLabel) htmlInput.getElementsByTagName("label").get(0);
+//            if (label == null) return;
+//            System.out.println(label.getAttribute("title"));
+//        });
     }
 
     HtmlForm getInformationForm(HtmlPage htmlPage, String... ids) {
@@ -138,8 +239,7 @@ public class DyuCourseBrowser extends WebClient {
         }
     }
 
-    @SneakyThrows
-    public Course getCourse(String courseId) throws IOException {
+    public Course getCourse(String courseId) throws IOException, InterruptedException {
         Optional<Course> courseOptional = coursePool.stream()
                 .filter(e -> e.getCourseId().equalsIgnoreCase(courseId))
                 .findFirst();
@@ -173,7 +273,7 @@ public class DyuCourseBrowser extends WebClient {
                 courseCredit.charAt(0)
         );
 
-        Thread.sleep(500);
+        Thread.sleep(400);
 
         Course course = Course.builder()
                 .courseName(courseName)
