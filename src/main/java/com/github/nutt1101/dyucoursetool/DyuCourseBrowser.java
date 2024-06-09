@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -50,12 +51,17 @@ public class DyuCourseBrowser extends WebClient {
         WebRequest r = new WebRequest(
                 new URL(this.loginApiLink), HttpMethod.POST
         );
-        r.setRequestBody(
-                String.format(
-                        "txt_userid=%s&pwd_word=%s",
-                        user.getLoginParameter().getId(),
-                        user.getLoginParameter().getPassword()
-                ));
+
+        List<NameValuePair> valuePairs = new ArrayList<>();
+        valuePairs.add(
+                new NameValuePair("txt_userid", user.getLoginParameter().getId())
+        );
+        valuePairs.add(
+                new NameValuePair("pwd_word", user.getLoginParameter().getPassword())
+        );
+
+
+        r.setRequestParameters(valuePairs);
         return r;
     }
 
@@ -97,8 +103,13 @@ public class DyuCourseBrowser extends WebClient {
     }
 
     void courseOperation(User user, OperationType type, Course course) throws IOException {
+        LocalDateTime now = LocalDateTime.now();
+
         if (user.getHeaderLog() == null ||
-                user.getServiceHost() == null
+                user.getServiceHost() == null ||
+                now.minusMinutes(5).isBefore(
+                        user.getLoginParameter().getLoginTime()
+                )
         ) {
             this.login(user);
         }
@@ -183,9 +194,16 @@ public class DyuCourseBrowser extends WebClient {
             user.setServiceHost(serviceHostURL.getHost());
 
             request.setUrl(serviceHostURL);
-            request.setRequestBody(
-                    this.convertFormToRequestBody(responseForm)
-            );
+
+            List<NameValuePair> requestBody = this.convertFormToRequestBody(responseForm);
+            request.setRequestParameters(requestBody);
+
+            String headerLog = requestBody.stream().filter(
+                    e -> e.getName().equalsIgnoreCase("header_log")
+            ).map(NameValuePair::getValue).findFirst().orElse(null);
+            user.setHeaderLog(headerLog);
+
+            user.getLoginParameter().setLoginTime(LocalDateTime.now());
 
             responsePage = this.getPage(request);
             responseForm = this.getInformationForm(responsePage, "mf", "myform");
@@ -214,20 +232,20 @@ public class DyuCourseBrowser extends WebClient {
                 .orElse(null);
     }
 
-    String convertFormToRequestBody(HtmlForm htmlForm) {
+    List<NameValuePair> convertFormToRequestBody(HtmlForm htmlForm) {
         List<HtmlInput> inputs = htmlForm.getChildNodes().stream()
                 .filter(e -> e instanceof HtmlInput)
                 .map(e -> (HtmlInput) e).toList();
 
-        List<String> bodies = new ArrayList<>();
+        List<NameValuePair> valuePairs = new ArrayList<>();
 
-        inputs.forEach(htmlInput -> bodies.add(
-                String.format(
-                        "%s=%s", htmlInput.getId(), htmlInput.getValue()
+        inputs.forEach(htmlInput -> valuePairs.add(
+                new NameValuePair(
+                        htmlInput.getId(), htmlInput.getValue()
                 )
         ));
 
-        return String.join("&", bodies);
+        return valuePairs;
     }
 
     boolean isValidURL(String url) {

@@ -11,6 +11,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,24 +24,39 @@ public class Configuration {
     final ConfigurationJsonLoader configurationJsonLoader;
     final DyuCourseBrowser browser;
     List<User> users;
+    DateTimeFormatter formatter;
 
     @PostConstruct
     void setup() throws IOException {
+        formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
         this.users = new ArrayList<>();
-//        this.setupUser();
+        this.setupUser();
+    }
+
+    List<User> getUserByCourseTime(LocalDateTime time) {
+        return this.users.stream().filter(
+              user -> user.getTimeToAddCourse().truncatedTo(ChronoUnit.MINUTES)
+                      .isEqual(time.truncatedTo(ChronoUnit.MINUTES))
+        ).toList();
     }
 
     void setupUser() throws IOException {
         JSONObject jsonObj = this.configurationJsonLoader.getJsonObject();
         JSONArray userArray = jsonObj.getJSONArray("info");
+
         for (int i = 0; i < userArray.length(); i++) {
             StringBuilder messageBuilder = new StringBuilder();
             JSONObject user = userArray.getJSONObject(i);
+
             LoginParameter parameter = this.getLoginParameterBuilder(user).build();
 
             JSONArray courseArray = user.getJSONArray("courses");
 
-            User newUser = this.getUserBuilder(parameter, this.getCourses(courseArray)).build();
+            User newUser = this.getUserBuilder(
+                    parameter,
+                    this.getCourses(courseArray),
+                    this.setupTime(user)
+            ).build();
 
             this.browser.login(newUser);
 
@@ -57,8 +75,13 @@ public class Configuration {
 
             this.users.add(newUser);
 
-            log.info(messageBuilder);
+            System.out.println(messageBuilder);
         }
+    }
+
+    LocalDateTime setupTime(JSONObject jsonObject) {
+        String time = jsonObject.getString("time");
+        return LocalDateTime.parse(time, formatter);
     }
 
     LoginParameter.LoginParameterBuilder getLoginParameterBuilder(JSONObject userObject) {
@@ -84,11 +107,11 @@ public class Configuration {
         return courses;
     }
 
-    User.UserBuilder getUserBuilder(LoginParameter p, List<Course> courses) {
+    User.UserBuilder getUserBuilder(LoginParameter p, List<Course> courses, LocalDateTime time) {
         return User.builder()
                 .loginParameter(p)
                 .courses(courses)
                 .headerLog(null)
-                .resaveString(null);
+                .timeToAddCourse(time);
     }
 }

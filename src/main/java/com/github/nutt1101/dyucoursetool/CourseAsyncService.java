@@ -12,7 +12,6 @@ import java.io.IOException;
 public class CourseAsyncService {
     final DyuCourseBrowser browser;
 
-    int i =0 ;
     @Async
     void addCourse(User user) throws IOException {
         this.browser.addCourse(user);

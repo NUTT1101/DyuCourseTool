@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.ToString;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Builder
@@ -13,6 +14,6 @@ public class User {
     LoginParameter loginParameter;
     List<Course> courses;
     String headerLog;
-    String resaveString;
     String serviceHost;
+    LocalDateTime timeToAddCourse;
 }
